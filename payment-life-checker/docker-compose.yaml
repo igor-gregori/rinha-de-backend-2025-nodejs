@@ -1,0 +1,25 @@
+services:
+  payment-life-checker:
+    build: .
+    hostname: payment-life-checker
+    networks:
+      - backend
+    environment:
+      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+      - WATCH_FILES=${WATCH_FILES:-0}
+    ports:
+      - 3000:3000
+    volumes:
+      - ".:/app"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "150MB"
+
+networks:
+  backend:
+    driver: bridge
+  payment-processor:
+    external: true
