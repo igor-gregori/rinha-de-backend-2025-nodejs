@@ -1,0 +1,12 @@
+/payment-life-checker/node_modules
+/payment-life-checker/package-lock.json
+
+/payment-proxy/node_modules
+/payment-proxy/package-lock.json
+
+/payment-worker/node_modules
+/payment-worker/package-lock.json
+
+arch-ds1.md
+arch-ds2.md
+arch-g1.md
