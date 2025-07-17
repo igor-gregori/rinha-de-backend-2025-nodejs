@@ -1,0 +1,23 @@
+services:
+  payment-worker-one:
+    build: .
+    hostname: payment-worker-one
+    networks:
+      - backend
+    environment:
+      - WATCH_FILES=${WATCH_FILES:-0}
+    ports:
+      - 3002:3000
+    volumes:
+      - ".:/app"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "150MB"
+
+networks:
+  backend:
+    external: true
+  payment-processor:
+    external: true
