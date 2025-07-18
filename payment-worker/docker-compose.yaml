@@ -4,7 +4,10 @@ services:
     hostname: payment-worker-one
     networks:
       - backend
+      - payment-processor
     environment:
+      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
       - WATCH_FILES=${WATCH_FILES:-0}
     ports:
       - 3002:3000
