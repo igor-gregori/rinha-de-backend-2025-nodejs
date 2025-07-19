@@ -13,6 +13,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "bullmq": "^5.56.4"
+    "bullmq": "^5.56.4",
+    "pg": "^8.16.3"
   }
 }
