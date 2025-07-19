@@ -6,51 +6,71 @@ const redisClient = new IORedis({
   maxRetriesPerRequest: null,
 });
 
-let timeoutId;
-const deplayInMs = 500;
-
 let processorsStatus = {
   default: {},
   fallback: {},
 };
 
-// TODO: Maybe i can use setInterval and work with AbortSignal
-function recursiveLifeChecker() {
-  timeoutId = setTimeout(async () => {
+async function processorsLifeChecker() {
+  try {
     const [defaultResponse, fallbackResponse] = await Promise.all([
-      fetch(`${process.env.PAYMENT_PROCESSOR_URL_DEFAULT}/payments/service-health`),
-      fetch(`${process.env.PAYMENT_PROCESSOR_URL_FALLBACK}/payments/service-health`),
+      fetch(`${process.env.PAYMENT_PROCESSOR_URL_DEFAULT}/payments/service-health`, {
+        signal: AbortSignal.timeout(5000),
+      }),
+      fetch(`${process.env.PAYMENT_PROCESSOR_URL_FALLBACK}/payments/service-health`, {
+        signal: AbortSignal.timeout(5000),
+      }),
     ]);
+
+    let updated = false;
+    let newStatus = { ...processorsStatus };
+
     if (defaultResponse.ok) {
       const defaultResponseBody = await defaultResponse.json();
-      processorsStatus.default = defaultResponseBody;
+      if (JSON.stringify(processorsStatus.default) !== JSON.stringify(defaultResponseBody)) {
+        newStatus.default = defaultResponseBody;
+        updated = true;
+      }
     } else {
       console.warn("Unable to verify status of default payment processor");
     }
+
     if (fallbackResponse.ok) {
       const fallbackResponseBody = await fallbackResponse.json();
-      processorsStatus.fallback = fallbackResponseBody;
+      if (JSON.stringify(processorsStatus.fallback) !== JSON.stringify(fallbackResponseBody)) {
+        newStatus.fallback = fallbackResponseBody;
+        updated = true;
+      }
     } else {
       console.warn("Unable to verify status of fallback payment processor");
     }
-    await redisClient.set("processors-status", JSON.stringify(processorsStatus));
-    console.info("Status of payment processors updated");
-    recursiveLifeChecker();
-  }, deplayInMs);
+
+    if (updated) {
+      processorsStatus = newStatus;
+      await redisClient.set("processors-status", JSON.stringify(processorsStatus));
+      console.info("Status of payment processors updated");
+    }
+  } catch (err) {
+    if (err.name === "TimeoutError") {
+      console.info("Timeout to verify status of processors");
+    } else {
+      console.error("Unable to verify status of processors", err);
+    }
+  }
 }
 
-recursiveLifeChecker();
+const intervalId = setInterval(processorsLifeChecker, 500);
 
-console.info(`Recursive life checker running with ${deplayInMs}ms deplay is running`);
+console.info("Processors life checker running");
 
 process.on("SIGTERM", async () => {
   console.info("SIGTERM received. Stopping recursive life checker...");
-  clearTimeout(timeoutId);
+  clearInterval(intervalId);
   process.exit(0);
 });
 
 process.on("SIGINT", async () => {
   console.info("SIGTERM received. Stopping recursive life checker...");
-  clearTimeout(timeoutId);
+  clearInterval(intervalId);
   process.exit(0);
 });
