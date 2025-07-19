@@ -1,5 +1,6 @@
 import { Worker } from "bullmq";
 import IORedis from "ioredis";
+import { Pool } from "pg";
 
 const redisClient = new IORedis({
   host: "redis",
@@ -7,37 +8,70 @@ const redisClient = new IORedis({
   maxRetriesPerRequest: null,
 });
 
-// TODO: Find out how i handle with errors
-// TODO: Find out how i handle with concurrency
+const pool = new Pool({
+  user: "rinha",
+  host: "postgres-backend",
+  database: "rinha",
+  password: "rinha",
+  port: 5432,
+  max: 20, // Número máximo de conexões no pool
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
 const worker = new Worker(
   "payment",
   async (job) => {
+    const client = await pool.connect();
+
     try {
       const payment = JSON.parse(job.data);
 
       const processorsStatusResponse = await redisClient.get("processors-status");
       const processorsStatus = JSON.parse(processorsStatusResponse);
+      console.log("processorsStatus =>", processorsStatus);
 
+      let processedBy = "";
       if (processorsStatus.default.failing === false) {
-        await sendPayment(process.env.PAYMENT_PROCESSOR_URL_DEFAULT, payment);
-        console.info("🟢 Payment processed with default processor");
+        const defaultResponse = await sendPayment(process.env.PAYMENT_PROCESSOR_URL_DEFAULT, payment);
+        if (defaultResponse.ok) {
+          console.info("🟢 Processed with default processor");
+        }
+        processedBy = "default";
       } else if (processorsStatus.fallback.failing === false) {
-        await sendPayment(process.env.PAYMENT_PROCESSOR_URL_FALLBACK, payment);
-        console.info("🟠 Payment processed with fallback processor");
+        const fallbackResponse = await sendPayment(process.env.PAYMENT_PROCESSOR_URL_FALLBACK, payment);
+        if (fallbackResponse.ok) {
+          console.info("🟡 Processed with fallback processor");
+        }
+        processedBy = "fallback";
       } else {
-        console.warn("🔴 Payment not processed");
+        const err = new Error("Unable to process payment, need retry");
+        err.code = "NEED-RETRY";
+        throw err;
       }
+
+      await client.query(
+        `INSERT INTO processed_payments (correlation_id, amount, processed_by, processed_at)
+         VALUES ($1, $2, $3, NOW())`,
+        [payment.correlationId, payment.amount, processedBy]
+      );
     } catch (err) {
-      console.error(err);
+      if (err.code === "NEED-RETRY") {
+        console.warn("🔁 Requeing payment...");
+        throw err;
+      }
+      console.error("Unknow payment processing error:", err);
+    } finally {
+      client.release();
     }
   },
   {
     connection: redisClient,
-    concurrency: 20,
+    concurrency: 1,
   }
 );
 
-console.log("Worker started");
+console.info("Worker started");
 
 async function sendPayment(url, payment) {
   return fetch(`${url}/payments`, {
@@ -52,13 +86,15 @@ async function sendPayment(url, payment) {
 }
 
 process.on("SIGTERM", async () => {
-  console.log("SIGTERM received. Closing worker...");
+  console.log("SIGTERM received. Closing worker and db pool...");
   await worker.close();
+  await pool.end();
   process.exit(0);
 });
 
 process.on("SIGINT", async () => {
-  console.log("SIGINT received. Closing worker...");
+  console.log("SIGINT received. Closing worker and db pool...");
   await worker.close();
+  await pool.end();
   process.exit(0);
 });
