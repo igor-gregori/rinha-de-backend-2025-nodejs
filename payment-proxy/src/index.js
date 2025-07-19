@@ -15,8 +15,14 @@ const server = createServer(async (req, res) => {
   }
   if (req.method === "POST" && req.url === "/payments") {
     const body = await getBody(req);
-    await paymentQueue.add("myJobName", body);
-    console.log("payment sent to queue");
+    await paymentQueue.add("myJobName", body, {
+      attempts: 100,
+      backoff: {
+        type: "fixed",
+        delay: 1000,
+      },
+    });
+    console.log("Payment sent to queue", body);
     res.statusCode = 201;
     return res.end();
   }
