@@ -1,5 +1,6 @@
 services:
   payment-worker-one:
+    # image: <seu-usuario-dockerhub>/payment-worker:latest
     build: .
     hostname: payment-worker-one
     networks:
@@ -8,16 +9,12 @@ services:
     environment:
       - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
       - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
-      - WATCH_FILES=${WATCH_FILES:-0}
-    ports:
-      - 3002:3000
-    volumes:
-      - ".:/app"
+      - WATCH_FILES=0
     deploy:
       resources:
         limits:
-          cpus: "0.5"
-          memory: "150MB"
+          cpus: "1"
+          memory: "600MB"
 
 networks:
   backend:

@@ -17,8 +17,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.4"
-          memory: "96MB"
+          cpus: "0.2"
+          memory: "30MB"
     restart: unless-stopped
 
 volumes:

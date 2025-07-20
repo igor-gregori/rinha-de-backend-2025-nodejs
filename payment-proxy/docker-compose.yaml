@@ -1,23 +1,58 @@
 services:
   payment-proxy-one:
+    # image: <seu-usuario-dockerhub>/payment-proxy:latest
     build: .
     hostname: payment-proxy-one
     networks:
       - backend
     environment:
-      - WATCH_FILES=${WATCH_FILES:-0}
+      - WATCH_FILES=0
     ports:
-      - 3001:3000
-    volumes:
-      - ".:/app"
+      - "3001:3000"
     deploy:
       resources:
         limits:
           cpus: "0.5"
-          memory: "150MB"
+          memory: "100MB"
+
+  payment-proxy-two:
+    # image: <seu-usuario-dockerhub>/payment-proxy:latest
+    build: .
+    hostname: payment-proxy-two
+    networks:
+      - backend
+    environment:
+      - WATCH_FILES=0
+    ports:
+      - "3002:3000"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "100MB"
 
 networks:
   backend:
     external: true
-  payment-processor:
-    external: true
+# services:
+#   payment-processor-intermediary-1: &app
+#     build: .
+#     hostname: payment-processor-intermediary-1
+#     networks:
+#       - payment-processor
+#     environment:
+#       - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
+#       - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+#       - WATCH_FILES=${WATCH_FILES:-0}
+#     ports:
+#       - "3000"
+#     volumes:
+#       - ".:/app"
+#     deploy:
+#       resources:
+#         limits:
+#           cpus: "0.5"
+#           memory: "150MB"
+#   payment-processor-intermediary-2:
+#     <<: *app
+#     hostname: payment-processor-intermediary-2

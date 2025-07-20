@@ -14,12 +14,8 @@ let processorsStatus = {
 async function processorsLifeChecker() {
   try {
     const [defaultResponse, fallbackResponse] = await Promise.all([
-      fetch(`${process.env.PAYMENT_PROCESSOR_URL_DEFAULT}/payments/service-health`, {
-        signal: AbortSignal.timeout(5000),
-      }),
-      fetch(`${process.env.PAYMENT_PROCESSOR_URL_FALLBACK}/payments/service-health`, {
-        signal: AbortSignal.timeout(5000),
-      }),
+      fetch(`${process.env.PAYMENT_PROCESSOR_URL_DEFAULT}/payments/service-health`),
+      fetch(`${process.env.PAYMENT_PROCESSOR_URL_FALLBACK}/payments/service-health`),
     ]);
 
     let updated = false;
@@ -51,15 +47,13 @@ async function processorsLifeChecker() {
       console.info("Status of payment processors updated");
     }
   } catch (err) {
-    if (err.name === "TimeoutError") {
-      console.info("Timeout to verify status of processors");
-    } else {
-      console.error("Unable to verify status of processors", err);
-    }
+    console.error("Unable to verify status of processors", err);
   }
 }
 
-const intervalId = setInterval(processorsLifeChecker, 500);
+processorsLifeChecker();
+
+const intervalId = setInterval(processorsLifeChecker, 5050);
 
 console.info("Processors life checker running");
 

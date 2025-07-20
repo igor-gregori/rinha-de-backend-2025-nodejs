@@ -11,8 +11,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.5"
-          memory: "50MB"
+          cpus: "0.2"
+          memory: "20MB"
 
 networks:
   backend:

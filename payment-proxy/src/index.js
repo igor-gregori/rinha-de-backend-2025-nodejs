@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { Queue } from "bullmq";
-import { Pool } from "pg"; // Adicione esta linha
+import { Pool } from "pg";
 
 const paymentQueue = new Queue("payment", {
   connection: {
@@ -26,13 +26,13 @@ const server = createServer(async (req, res) => {
   if (req.method === "POST" && req.url === "/payments") {
     const body = await getBody(req);
     await paymentQueue.add("myJobName", body, {
-      attempts: 100,
+      attempts: 10,
       backoff: {
-        type: "fixed",
-        delay: 1000,
+        type: "exponential",
+        delay: 2000,
       },
     });
-    console.log("Payment sent to queue", body);
+    console.log("Payment sent to queue");
     res.statusCode = 201;
     return res.end();
   }

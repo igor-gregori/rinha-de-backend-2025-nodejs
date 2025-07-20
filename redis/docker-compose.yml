@@ -9,6 +9,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: "200MB"
     restart: unless-stopped
 
 volumes:
