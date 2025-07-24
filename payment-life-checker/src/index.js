@@ -11,40 +11,66 @@ let processorsStatus = {
   fallback: {},
 };
 
+let lastCheck = 0;
+const CACHE_TTL = 4800; // Cache por 4.8s para evitar rate limiting
+
 async function processorsLifeChecker() {
+  const now = Date.now();
+
+  // Cache inteligente - só faz nova requisição se passou o tempo mínimo
+  if (now - lastCheck < CACHE_TTL) {
+    return;
+  }
+
+  lastCheck = now;
+  let updated = false;
+  let newStatus = structuredClone(processorsStatus); // Deep copy
+
+  console.log("Checking processors status...");
+
   try {
-    const [defaultResponse, fallbackResponse] = await Promise.all([
+    const [defaultResponse, fallbackResponse] = await Promise.allSettled([
       fetch(`${process.env.PAYMENT_PROCESSOR_URL_DEFAULT}/payments/service-health`),
       fetch(`${process.env.PAYMENT_PROCESSOR_URL_FALLBACK}/payments/service-health`),
     ]);
 
-    let updated = false;
-    let newStatus = { ...processorsStatus };
+    console.log("defaultResponse => ", defaultResponse);
+    console.log("fallbackResponse => ", fallbackResponse);
 
-    if (defaultResponse.ok) {
-      const defaultResponseBody = await defaultResponse.json();
-      if (JSON.stringify(processorsStatus.default) !== JSON.stringify(defaultResponseBody)) {
+    // Default Processor
+    if (defaultResponse.status === "fulfilled" && defaultResponse.value.ok) {
+      const defaultResponseBody = await defaultResponse.value.json();
+      if (JSON.stringify(newStatus.default) !== JSON.stringify(defaultResponseBody)) {
         newStatus.default = defaultResponseBody;
         updated = true;
       }
     } else {
-      console.warn("Unable to verify status of default payment processor");
+      if (!newStatus.default.failing) {
+        newStatus.default.failing = true;
+        updated = true;
+      }
     }
 
-    if (fallbackResponse.ok) {
-      const fallbackResponseBody = await fallbackResponse.json();
-      if (JSON.stringify(processorsStatus.fallback) !== JSON.stringify(fallbackResponseBody)) {
+    // Fallback Processor
+    if (fallbackResponse.status === "fulfilled" && fallbackResponse.value.ok) {
+      const fallbackResponseBody = await fallbackResponse.value.json();
+      if (JSON.stringify(newStatus.fallback) !== JSON.stringify(fallbackResponseBody)) {
         newStatus.fallback = fallbackResponseBody;
         updated = true;
       }
     } else {
-      console.warn("Unable to verify status of fallback payment processor");
+      if (!newStatus.fallback.failing) {
+        newStatus.fallback.failing = true;
+        updated = true;
+      }
     }
 
     if (updated) {
       processorsStatus = newStatus;
       await redisClient.set("processors-status", JSON.stringify(processorsStatus));
-      console.info("Status of payment processors updated");
+      console.log("Updated processors status:", JSON.stringify(processorsStatus));
+    } else {
+      console.log("No updates needed. Current status:", JSON.stringify(processorsStatus));
     }
   } catch (err) {
     console.error("Unable to verify status of processors", err);

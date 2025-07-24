@@ -14,14 +14,51 @@ const pool = new Pool({
   database: "rinha",
   password: "rinha",
   port: 5432,
-  max: 20,
+  max: 80, // Aumentado para alta carga
+  min: 10,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 2000, // Reduzido para falhar mais rápido
 });
+
+// Circuit breaker simples para evitar tentativas desnecessárias
+let circuitBreaker = {
+  default: { failures: 0, lastFailure: 0, isOpen: false },
+  fallback: { failures: 0, lastFailure: 0, isOpen: false },
+};
+
+const CIRCUIT_BREAKER_THRESHOLD = 5;
+const CIRCUIT_BREAKER_TIMEOUT = 30000; // 30s
+
+function isCircuitOpen(processor) {
+  const breaker = circuitBreaker[processor];
+  if (breaker.failures >= CIRCUIT_BREAKER_THRESHOLD) {
+    if (Date.now() - breaker.lastFailure > CIRCUIT_BREAKER_TIMEOUT) {
+      // Reset circuit breaker
+      breaker.failures = 0;
+      breaker.isOpen = false;
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+function recordFailure(processor) {
+  const breaker = circuitBreaker[processor];
+  breaker.failures++;
+  breaker.lastFailure = Date.now();
+  breaker.isOpen = breaker.failures >= CIRCUIT_BREAKER_THRESHOLD;
+}
+
+function recordSuccess(processor) {
+  const breaker = circuitBreaker[processor];
+  breaker.failures = Math.max(0, breaker.failures - 1);
+  breaker.isOpen = false;
+}
 
 async function sendPayment(url, payment) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 2000);
+  const timeout = setTimeout(() => controller.abort(), 1500);
   try {
     const response = await fetch(`${url}/payments`, {
       method: "POST",
@@ -30,7 +67,10 @@ async function sendPayment(url, payment) {
         amount: payment.amount,
         requestedAt: new Date().toISOString(),
       }),
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Connection: "keep-alive",
+      },
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -46,33 +86,45 @@ const worker = new Worker(
   async (job) => {
     const client = await pool.connect();
     try {
-      const payment = typeof job.data === "string" ? JSON.parse(job.data) : job.data;
+      const payment = JSON.parse(job.data);
       const processorsStatusResponse = await redisClient.get("processors-status");
-      const processorsStatus = JSON.parse(processorsStatusResponse);
+      const processorsStatus = JSON.parse(processorsStatusResponse) || { default: {}, fallback: {} };
 
       let processedBy = "";
       let response;
 
-      if (processorsStatus.default && processorsStatus.default.failing === false) {
+      const defaultIsFailing = !processorsStatus.default || processorsStatus.default.failing;
+      const fallbackIsFailing = !processorsStatus.fallback || processorsStatus.fallback.failing;
+
+      const defaultResponseTime = processorsStatus.default?.minimumResponseTime || 99999;
+      const fallbackResponseTime = processorsStatus.fallback?.minimumResponseTime || 99999;
+
+      const shouldUseDefault =
+        !defaultIsFailing &&
+        !isCircuitOpen("default") &&
+        (fallbackIsFailing || isCircuitOpen("fallback") || defaultResponseTime <= fallbackResponseTime * 1.12);
+
+      if (shouldUseDefault) {
         response = await sendPayment(process.env.PAYMENT_PROCESSOR_URL_DEFAULT, payment);
         if (response.ok) {
           processedBy = "default";
-          console.info("🟢 Processed with default processor");
+          recordSuccess("default");
         } else {
-          console.warn(`Default processor failed: ${response.status}`);
+          recordFailure("default");
         }
       }
 
-      if (!processedBy && processorsStatus.fallback && processorsStatus.fallback.failing === false) {
+      if (!processedBy && !fallbackIsFailing && !isCircuitOpen("fallback")) {
         response = await sendPayment(process.env.PAYMENT_PROCESSOR_URL_FALLBACK, payment);
         if (response.ok) {
           processedBy = "fallback";
-          console.info("🟡 Processed with fallback processor");
+          recordSuccess("fallback");
         } else {
-          console.warn(`Fallback processor failed: ${response.status}`);
+          recordFailure("fallback");
         }
       }
 
+      console.log("processedBy => ", processedBy);
       if (!processedBy) {
         const err = new Error("Unable to process payment, need retry");
         err.code = "NEED-RETRY";
@@ -97,7 +149,7 @@ const worker = new Worker(
   },
   {
     connection: redisClient,
-    concurrency: 10,
+    concurrency: 100,
   }
 );
 
