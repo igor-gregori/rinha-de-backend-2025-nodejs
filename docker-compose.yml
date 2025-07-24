@@ -1,11 +1,14 @@
-networks:
-  backend:
-    driver: bridge
-  payment-processor:
-    external: true
+# name                    cpu     memo
+# ------------------------------------
+# nginx                   0,1     20
+# postgres-backend        0,4     100
+# redis                   0,2     30
+# payment-proxy-one       0,1     40
+# payment-proxy-two       0,1     40
+# payment-worker          0,5     100
+# payment-life-checker    0,1     20
 
 services:
-  # PostgreSQL Database
   postgres-backend:
     image: postgres:17-alpine
     container_name: postgres-backend
@@ -24,11 +27,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "2"
-          memory: "300MB"
+          cpus: "0.3"
+          memory: "100MB"
     restart: unless-stopped
 
-  # Redis Cache
   redis:
     image: redis:latest
     container_name: redis
@@ -40,11 +42,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "2"
-          memory: "300MB"
+          cpus: "0.2"
+          memory: "30MB"
     restart: unless-stopped
 
-  # Payment Proxy Instances
   payment-proxy-one:
     build:
       context: ./payment-proxy
@@ -57,8 +58,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.8" # Aumentado para suportar mais carga
-          memory: "150MB"
+          cpus: "0.3"
+          memory: "50MB"
     depends_on:
       - postgres-backend
       - redis
@@ -76,18 +77,17 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.8" # Aumentado para suportar mais carga
-          memory: "150MB"
+          cpus: "0.2"
+          memory: "50MB"
     depends_on:
       - postgres-backend
       - redis
     restart: unless-stopped
 
-  # Payment Workers
-  payment-worker-one:
+  payment-worker:
     build:
       context: ./payment-worker
-    hostname: payment-worker-one
+    hostname: payment-worker
     networks:
       - backend
       - payment-processor
@@ -98,33 +98,12 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "4"
-          memory: "500MB"
+          cpus: "0.3"
+          memory: "100MB"
     depends_on:
       - postgres-backend
       - redis
 
-  payment-worker-two:
-    build:
-      context: ./payment-worker
-    hostname: payment-worker-two
-    networks:
-      - backend
-      - payment-processor
-    environment:
-      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
-      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
-      - WATCH_FILES=0
-    deploy:
-      resources:
-        limits:
-          cpus: "4"
-          memory: "500MB"
-    depends_on:
-      - postgres-backend
-      - redis
-
-  # Payment Life Checker
   payment-life-checker:
     build:
       context: ./payment-life-checker
@@ -139,12 +118,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.2"
-          memory: "40MB"
+          cpus: "0.1"
+          memory: "40MB" # alterar isso aqui
     depends_on:
       - redis
 
-  # Nginx Load Balancer
   nginx:
     image: nginx:latest
     volumes:
@@ -157,11 +135,17 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1"
-          memory: "200MB"
+          cpus: "0.1"
+          memory: "50MB" # alterar isso aqui
     depends_on:
       - payment-proxy-one
       - payment-proxy-two
+
+networks:
+  backend:
+    driver: bridge
+  payment-processor:
+    external: true
 
 volumes:
   postgres_data:

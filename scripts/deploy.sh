@@ -27,7 +27,7 @@ docker compose up -d
 
 # Aguardar serviços ficarem prontos
 echo "⏳ Aguardando serviços ficarem prontos..."
-sleep 5
+sleep 8
 
 # Verificar status dos serviços
 echo "📊 Status dos serviços:"

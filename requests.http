@@ -17,6 +17,9 @@ Content-Type: application/json
 ### Resumo de pagamentos
 GET {{paymentProxyUrl}}/payments-summary?from=2025-07-01T00:00:00.000Z&to=2025-07-30T00:00:00.000Z
 
+### Limpa o banco
+DELETE {{paymentProxyUrl}}/payments
+
 
 ### payment-processor-default endpoints ###############################################################################
 @processorDefaultUrl = http://localhost:8001

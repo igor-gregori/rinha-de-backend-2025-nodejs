@@ -26,16 +26,11 @@ async function processorsLifeChecker() {
   let updated = false;
   let newStatus = structuredClone(processorsStatus); // Deep copy
 
-  console.log("Checking processors status...");
-
   try {
     const [defaultResponse, fallbackResponse] = await Promise.allSettled([
       fetch(`${process.env.PAYMENT_PROCESSOR_URL_DEFAULT}/payments/service-health`),
       fetch(`${process.env.PAYMENT_PROCESSOR_URL_FALLBACK}/payments/service-health`),
     ]);
-
-    console.log("defaultResponse => ", defaultResponse);
-    console.log("fallbackResponse => ", fallbackResponse);
 
     // Default Processor
     if (defaultResponse.status === "fulfilled" && defaultResponse.value.ok) {
