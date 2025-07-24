@@ -15,10 +15,10 @@ Content-Type: application/json
 }
 
 ### Resumo de pagamentos
-GET {{paymentProxyUrl}}/payments-summary?from=2025-06-01T20:50:00.000Z&to=2025-06-30T20:55:00.000Z
+GET {{paymentProxyUrl}}/payments-summary?from=2025-07-01T00:00:00.000Z&to=2025-07-30T00:00:00.000Z
 
 
-### payment-processor-default endpoints ###
+### payment-processor-default endpoints ###############################################################################
 @processorDefaultUrl = http://localhost:8001
 
 ### Fazer um pagamento
@@ -55,8 +55,17 @@ X-Rinha-Token: 123
   "failure": false
 }
 
+### Configura delay
+PUT {{processorDefaultUrl}}/admin/configurations/delay
+Content-Type: application/json
+X-Rinha-Token: 123
 
-### payment-processor-fallback endpoints ###
+{
+    "delay" : 0
+}
+
+
+### payment-processor-fallback endpoints ##################################################################################
 @processorFallbackUrl = http://localhost:8002
 
 ### Service health
@@ -77,4 +86,13 @@ X-Rinha-Token: 123
 
 {
   "failure": false
+}
+
+### Configura delay
+PUT {{processorFallbackUrl}}/admin/configurations/delay
+Content-Type: application/json
+X-Rinha-Token: 123
+
+{
+    "delay" : 0
 }
